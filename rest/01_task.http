@@ -1,0 +1,28 @@
+@baseUrl = https://zadania.aidevs.pl
+@tokenUrl = {{baseUrl}}/token
+@taskUrl = {{baseUrl}}/task
+
+@answerUrl = {{baseUrl}}/answer
+
+@apiKey = 0f62e104-c517-4a47-80b6-c463af57d79a
+
+### 01 - helloapi
+### Token
+# @name tokenResult
+POST {{tokenUrl}}/helloapi
+
+{
+  "apikey": "{{apiKey}}"
+}
+
+### Task
+# @name task
+GET  {{taskUrl}}/{{tokenResult.response.body.token}} 
+
+### Answer
+
+POST {{answerUrl}}/{{tokenResult.response.body.token}} 
+
+{
+    "answer" : "{{task.response.body.cookie}}"
+}
