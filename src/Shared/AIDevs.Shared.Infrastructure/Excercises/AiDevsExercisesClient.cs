@@ -38,6 +38,17 @@ namespace AIDevs.Shared.Infrastructure.Excercises
             return await httpResponse.Content.ReadFromJsonAsync<TaskResponse>();
         }
 
+        public async ValueTask<TaskResponse> PostTaskAsync(string token, IDictionary<string,string> formData)
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"task/{token}");
+
+            httpRequest.Content = new FormUrlEncodedContent(formData);
+
+            var httpResponse = await _httpClient.SendAsync(httpRequest);
+
+            return await httpResponse.Content.ReadFromJsonAsync<TaskResponse>();
+        }
+
         public async ValueTask<AnswerResponse> SendResponseAsync<TAnswer>(string token, TAnswer answer)
         {
             var request = new AnswerRequest<TAnswer>(answer);

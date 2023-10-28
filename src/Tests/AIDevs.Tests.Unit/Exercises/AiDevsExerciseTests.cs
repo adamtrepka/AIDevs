@@ -4,6 +4,7 @@ namespace AIDevs.Tests.Unit.Exercises
 {
     public class AiDevsExerciseTests : AiDevsExerciseBaseTests
     {
+        private const string CHAT_COMPLETIONS_MODEL_NAME = "gpt-3.5-turbo";
         public AiDevsExerciseTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
         {
         }
@@ -42,7 +43,7 @@ namespace AIDevs.Tests.Unit.Exercises
 
             var answer = new List<int>();
 
-            foreach(var paragraph in paragraphs)
+            foreach (var paragraph in paragraphs)
             {
                 var moderationResult = await OpenAiClient.ModerationsAsync(new Shared.Infrastructure.OpenAi.CreateModerationRequest()
                 {
@@ -80,7 +81,7 @@ namespace AIDevs.Tests.Unit.Exercises
                 string? chapter = chapters[i];
                 var completionResult = await OpenAiClient.ChatCompletionsAsync(new CreateChatCompletionRequest
                 {
-                    Model = "gpt-3.5-turbo",
+                    Model = CHAT_COMPLETIONS_MODEL_NAME,
                     Messages = new ChatCompletionRequestMessage[]
                     {
                         new ChatCompletionRequestMessage
@@ -109,6 +110,63 @@ namespace AIDevs.Tests.Unit.Exercises
             result.Should().NotBeNull();
             result.Code.Should().Be(0);
 
+        }
+
+        [Theory(DisplayName = "Exercise 04 - liar")]
+        [InlineData("What is capital of Poland?")]
+        [InlineData("When did World War II end?")]
+        [InlineData("Who was the first man to step on the moon?")]
+        public async Task Should_Send_Answer_For_Liar_Exercise(string question)
+        {
+            // Arrange
+            var token = await ExercisesClient.GetTokenAsync("liar");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            TestOutputHelper.WriteLine("Task message: {0}", task.Msg);
+
+            // Act
+
+            var questionResult = await ExercisesClient.PostTaskAsync(token.Token, new Dictionary<string, string>
+            {
+                { "question",question }
+            });
+
+            var questionAnswer = questionResult.AdditionalData["answer"].ToString();
+            TestOutputHelper.WriteLine("Question: {0} Answer: {1}", question, questionAnswer);
+
+
+            var completionResult = await OpenAiClient.ChatCompletionsAsync(new CreateChatCompletionRequest
+            {
+                Model = CHAT_COMPLETIONS_MODEL_NAME,
+                Messages = new ChatCompletionRequestMessage[]
+                   {
+                        new ChatCompletionRequestMessage
+                        {
+                            Role = ChatCompletionRequestMessageRole.system,
+                            Content = "You are a filtration system called Guardialis. " +
+                            "Your task is check answer for asked question. " +
+                            "If answer is related with question you have to return 'YES'. " +
+                            "In other wise you have to return 'NO'. " +
+                            "As a system you can only use 'YES' or 'NO' answer."
+                        },
+                        new ChatCompletionRequestMessage
+                        {
+                            Role = ChatCompletionRequestMessageRole.user,
+                            Content = $"Does the response '{questionAnswer}' answer the question '{question}'?"
+                        }
+                   }
+            });
+
+            var completionResultMessage = completionResult.Choices.Select(x => x.Message.Content).FirstOrDefault();
+            TestOutputHelper.WriteLine("Is answer is related with question?: {0}", completionResultMessage);
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, completionResultMessage);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
         }
     }
 }
