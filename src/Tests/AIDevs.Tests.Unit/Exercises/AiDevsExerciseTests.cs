@@ -1,5 +1,4 @@
-﻿using AIDevs.Tests.Unit.Infrastructure;
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace AIDevs.Tests.Unit.Exercises
 {
@@ -45,8 +44,11 @@ namespace AIDevs.Tests.Unit.Exercises
 
             foreach(var paragraph in paragraphs)
             {
-                var moderationResult = await OpenAiClient.GetModerationAsync(paragraph);
-                var flaged = moderationResult?.results?.Any(x => x.flagged) ?? false;
+                var moderationResult = await OpenAiClient.ModerationsAsync(new Shared.Infrastructure.OpenAi.CreateModerationRequest()
+                {
+                    Input = paragraph
+                });
+                var flaged = moderationResult?.Results?.Any(x => x.Flagged) ?? false;
                 answer.Add(flaged ? 1 : 0);
             }
 
@@ -71,7 +73,42 @@ namespace AIDevs.Tests.Unit.Exercises
             // Act
             var chapters = task.AdditionalData["blog"].Deserialize<string[]>();
 
+            var answer = new List<string>();
+
+            for (int i = 0; i < chapters.Length; i++)
+            {
+                string? chapter = chapters[i];
+                var completionResult = await OpenAiClient.ChatCompletionsAsync(new CreateChatCompletionRequest
+                {
+                    Model = "gpt-3.5-turbo",
+                    Messages = new ChatCompletionRequestMessage[]
+                    {
+                        new ChatCompletionRequestMessage
+                        {
+                            Role = ChatCompletionRequestMessageRole.system,
+                            Content = "You are the author of a blog. The blog is written in Polish. You prepare your blog post divided into chapters."
+                        },
+                        new ChatCompletionRequestMessage
+                        {
+                            Role = ChatCompletionRequestMessageRole.user,
+                            Content = $"Prepare a chapter of your blog post entitled: '{i} - {chapter}'."
+                        }
+                    },
+                    Max_tokens = 200
+                });
+
+                var text = completionResult.Choices.Select(x => x.Message.Content).FirstOrDefault();
+                answer.Add(text);
+            }
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
             // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+
         }
     }
 }

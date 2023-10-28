@@ -9,7 +9,7 @@
             var apiKey = Environment.GetEnvironmentVariable(EnvironmentVariableNames.OPENAI_APIKEY_ENVIRONMENT_VARIABLE_NAME);
             _httpClient = new HttpClient()
             {
-                BaseAddress = new Uri("https://api.openai.com"),
+                BaseAddress = new Uri("https://api.openai.com/v1/"),
             };
             _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
         }
