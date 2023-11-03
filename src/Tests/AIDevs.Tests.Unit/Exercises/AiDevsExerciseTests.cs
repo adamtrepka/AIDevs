@@ -242,5 +242,26 @@ namespace AIDevs.Tests.Unit.Exercises
                 return completionResultMessage;
             }
         }
+
+        [Fact(DisplayName = "Exercise 06 - embedding")]
+        public async Task Should_Generate_Embedding()
+        {
+            // Arrange
+            var token = await ExercisesClient.GetTokenAsync("embedding");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            // Act
+            var input = "Hawaiian pizza";
+            var embeddingResult = await AzureOpenAiClient.GetEmbeddingsAsync(EMBEDDING_MODEL_NAME, new EmbeddingsOptions(input));
+            var embedding = embeddingResult.Value.Data[0].Embedding.ToArray();
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, embedding);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+        }
     }
 }
