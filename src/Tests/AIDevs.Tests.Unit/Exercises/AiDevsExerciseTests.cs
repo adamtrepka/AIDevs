@@ -1,10 +1,12 @@
-﻿using System.Text.Json;
+﻿using Azure.AI.OpenAI;
+using System.Text.Json;
 
 namespace AIDevs.Tests.Unit.Exercises
 {
     public class AiDevsExerciseTests : AiDevsExerciseBaseTests
     {
         private const string CHAT_COMPLETIONS_MODEL_NAME = "gpt-3.5-turbo";
+        private const string EMBEDDING_MODEL_NAME = "text-embedding-ada-002";
         public AiDevsExerciseTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
         {
         }
@@ -79,26 +81,20 @@ namespace AIDevs.Tests.Unit.Exercises
             for (int i = 0; i < chapters.Length; i++)
             {
                 string? chapter = chapters[i];
-                var completionResult = await OpenAiClient.ChatCompletionsAsync(new CreateChatCompletionRequest
-                {
-                    Model = CHAT_COMPLETIONS_MODEL_NAME,
-                    Messages = new ChatCompletionRequestMessage[]
-                    {
-                        new ChatCompletionRequestMessage
-                        {
-                            Role = ChatCompletionRequestMessageRole.system,
-                            Content = "You are the author of a blog. The blog is written in Polish. You prepare your blog post divided into chapters."
-                        },
-                        new ChatCompletionRequestMessage
-                        {
-                            Role = ChatCompletionRequestMessageRole.user,
-                            Content = $"Prepare a chapter of your blog post entitled: '{i} - {chapter}'."
-                        }
-                    },
-                    Max_tokens = 200
-                });
 
-                var text = completionResult.Choices.Select(x => x.Message.Content).FirstOrDefault();
+                var completionOptions = new ChatCompletionsOptions();
+
+                completionOptions.Messages.Add(new(
+                    ChatRole.System,
+                    "You are the author of a blog. The blog is written in Polish. You prepare your blog post divided into chapters."));
+
+                completionOptions.Messages.Add(new(
+                    ChatRole.User,
+                    $"Prepare a chapter of your blog post entitled: '{i} - {chapter}'."));
+
+                var azureOpenAiCompletionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionOptions);
+
+                var text = azureOpenAiCompletionResult.Value.Choices.Select(x => x.Message.Content).FirstOrDefault();
                 answer.Add(text);
             }
 
@@ -122,8 +118,6 @@ namespace AIDevs.Tests.Unit.Exercises
             var token = await ExercisesClient.GetTokenAsync("liar");
             var task = await ExercisesClient.GetTaskAsync(token.Token);
 
-            TestOutputHelper.WriteLine("Task message: {0}", task.Msg);
-
             // Act
 
             var questionResult = await ExercisesClient.PostTaskAsync(token.Token, new Dictionary<string, string>
@@ -132,33 +126,29 @@ namespace AIDevs.Tests.Unit.Exercises
             });
 
             var questionAnswer = questionResult.AdditionalData["answer"].ToString();
-            TestOutputHelper.WriteLine("Question: {0} Answer: {1}", question, questionAnswer);
+            TestOutputHelper.WriteLine("Question: {0}", question);
+            TestOutputHelper.WriteLine("Answer: {0}", questionAnswer);
 
+            var completionOptions = new ChatCompletionsOptions();
 
-            var completionResult = await OpenAiClient.ChatCompletionsAsync(new CreateChatCompletionRequest
-            {
-                Model = CHAT_COMPLETIONS_MODEL_NAME,
-                Messages = new ChatCompletionRequestMessage[]
-                   {
-                        new ChatCompletionRequestMessage
-                        {
-                            Role = ChatCompletionRequestMessageRole.system,
-                            Content = "You are a filtration system called Guardialis. " +
-                            "Your task is check answer for asked question. " +
-                            "If answer is related with question you have to return 'YES'. " +
-                            "In other wise you have to return 'NO'. " +
-                            "As a system you can only use 'YES' or 'NO' answer."
-                        },
-                        new ChatCompletionRequestMessage
-                        {
-                            Role = ChatCompletionRequestMessageRole.user,
-                            Content = $"Does the response '{questionAnswer}' answer the question '{question}'?"
-                        }
-                   }
-            });
+            completionOptions.Temperature = 0;
 
-            var completionResultMessage = completionResult.Choices.Select(x => x.Message.Content).FirstOrDefault();
-            TestOutputHelper.WriteLine("Is answer is related with question?: {0}", completionResultMessage);
+            completionOptions.Messages.Add(new(
+                ChatRole.System,
+                "You are a filtration system called Guardialis. " +
+                "Your task is check answer for asked question. " +
+                "If answer is related with question you have to return 'YES'. " +
+                "In other wise you have to return 'NO'. " +
+                "As a system you can only use 'YES' or 'NO' answer."));
+
+            completionOptions.Messages.Add(new(
+                ChatRole.User,
+                $"Does the response '{questionAnswer}' answer the question '{question}'?"));
+
+            var completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionOptions);
+
+            var completionResultMessage = completionResult.Value.Choices.Select(x => x.Message.Content).FirstOrDefault();
+            TestOutputHelper.WriteLine("Is the answer related to the question?: {0}", completionResultMessage);
 
             var result = await ExercisesClient.SendResponseAsync(token.Token, completionResultMessage);
 
@@ -167,6 +157,90 @@ namespace AIDevs.Tests.Unit.Exercises
 
             result.Should().NotBeNull();
             result.Code.Should().Be(0);
+        }
+
+        [Fact(DisplayName = "Exercise 05 - inprompt")]
+        public async Task Shoud_Filter_Input_And_Answer_The_Question()
+        {
+            // Arrange
+            var token = await ExercisesClient.GetTokenAsync("inprompt");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var input = task.AdditionalData["input"].Deserialize<string[]>();
+            var question = task.AdditionalData["question"].Deserialize<string>();
+
+            // Act
+
+            var name = await FindName(question);
+            var filter = input.Where(text => text.Contains(name, StringComparison.InvariantCultureIgnoreCase));
+
+            var answer = await AnswerQuestion(question, filter);
+
+            TestOutputHelper.WriteLine("Question: {0}", question);
+            TestOutputHelper.WriteLine("Answer: {0}", answer);
+
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+
+            async Task<string> FindName(string question)
+            {
+                var completionOptions = new ChatCompletionsOptions();
+
+                completionOptions.Temperature = 0;
+
+                completionOptions.Messages.Add(new(
+                    role: ChatRole.System,
+                    content: "Recognise and return the names contained in the text"
+                    ));
+
+                completionOptions.Messages.Add(new(
+                    role: ChatRole.User,
+                    content: "How old is Adam?"
+                    ));
+
+                completionOptions.Messages.Add(new(
+                    role: ChatRole.Assistant,
+                    content: "Adam"));
+
+                completionOptions.Messages.Add(new(
+                    role: ChatRole.User,
+                    content: question));
+
+                var completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionOptions);
+
+                var completionResultMessage = completionResult.Value.Choices.Select(x => x.Message.Content).FirstOrDefault();
+
+                return completionResultMessage;
+            }
+
+            async Task<string> AnswerQuestion(string question, IEnumerable<string> input)
+            {
+                var completionOptions = new ChatCompletionsOptions();
+
+                completionOptions.Temperature = 0;
+
+                completionOptions.Messages.Add(new(
+                    role: ChatRole.System,
+                    content: $@"Answer the question based on the facts: {string.Join(" ", input)}"
+                    ));
+
+
+                completionOptions.Messages.Add(new(
+                    role: ChatRole.User,
+                    content: question));
+
+                var completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionOptions);
+
+                var completionResultMessage = completionResult.Value.Choices.Select(x => x.Message.Content).FirstOrDefault();
+
+                return completionResultMessage;
+            }
         }
     }
 }
