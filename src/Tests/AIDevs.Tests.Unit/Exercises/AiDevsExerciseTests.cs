@@ -1,4 +1,5 @@
-﻿using Azure.AI.OpenAI;
+﻿using AIDevs.Shared.Infrastructure.OpenAi;
+using Azure.AI.OpenAI;
 using System.Text.Json;
 
 namespace AIDevs.Tests.Unit.Exercises
@@ -7,6 +8,7 @@ namespace AIDevs.Tests.Unit.Exercises
     {
         private const string CHAT_COMPLETIONS_MODEL_NAME = "gpt-3.5-turbo";
         private const string EMBEDDING_MODEL_NAME = "text-embedding-ada-002";
+        private const string AUDIO_MODEL_NAME = "whisper-1";
         public AiDevsExerciseTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
         {
         }
@@ -256,6 +258,29 @@ namespace AIDevs.Tests.Unit.Exercises
             var embedding = embeddingResult.Value.Data[0].Embedding.ToArray();
 
             var result = await ExercisesClient.SendResponseAsync(token.Token, embedding);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+        }
+
+        [Fact(DisplayName = "Exercise 06 - whisper")]
+        public async Task Should_Generate_Transcription()
+        {
+            // Arrange
+            var token = await ExercisesClient.GetTokenAsync("whisper");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            // Act
+            using var httpCLient = new HttpClient();
+            var bytes = await httpCLient.GetByteArrayAsync("https://zadania.aidevs.pl/data/mateusz.mp3");
+
+            var transctiptionResult = await AzureOpenAiClient.GetAudioTranscriptionAsync(AUDIO_MODEL_NAME, new AudioTranscriptionOptions(BinaryData.FromBytes(bytes)));
+            var transcription = transctiptionResult.Value.Text;
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, transcription);
 
             // Assert
             TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
