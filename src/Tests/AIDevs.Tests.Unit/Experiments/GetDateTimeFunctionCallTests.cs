@@ -43,8 +43,10 @@ namespace AIDevs.Tests.Unit.Experiments
             completionsOptions.Functions.Add(FunctionDefinitionExtensions.Create<GetDateTime>());
 
             // Adding a prompt using a defined function
-            completionsOptions.Messages.Add(new(ChatRole.User, "Hello, what time is it?"));
+            var prompt = new ChatMessage(ChatRole.User, "Hello, what day of the week is it and what time is it?");
 
+            completionsOptions.Messages.Add(prompt);
+            _testOutputHelper.WriteLine($"User: {prompt.Content}");
 
             // Act
             var completionResult = await _azureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
@@ -57,13 +59,21 @@ namespace AIDevs.Tests.Unit.Experiments
                 // Function call
                 var callResult = await _functionCallDispatcher.DispatchAsync(message.FunctionCall.Name, message.FunctionCall.Arguments);
 
+                _testOutputHelper.WriteLine("Assistant: Calling the 'GetDateTime' function...");
+
+
                 completionsOptions.Messages.Add(message);
-                completionsOptions.Messages.Add(callResult.ToChatMessage(message.FunctionCall.Name));
+
+                var functionMessage = callResult.ToChatMessage(message.FunctionCall.Name);
+
+                _testOutputHelper.WriteLine($"Function: {functionMessage.Content}");
+
+                completionsOptions.Messages.Add(functionMessage);
 
                 completionResult = await _azureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
             }
 
-            _testOutputHelper.WriteLine(completionResult.Value.Choices[0].Message.Content);
+            _testOutputHelper.WriteLine($"Assistant: {completionResult.Value.Choices[0].Message.Content}");
 
         }
     }
