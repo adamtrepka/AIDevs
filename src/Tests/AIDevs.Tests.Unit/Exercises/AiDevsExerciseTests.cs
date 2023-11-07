@@ -288,5 +288,27 @@ namespace AIDevs.Tests.Unit.Exercises
             result.Should().NotBeNull();
             result.Code.Should().Be(0);
         }
+
+        [Fact(DisplayName = "Exercise 08 - rodo")]
+        public async Task Should_Use_Placeholders()
+        {
+            // Arrange
+            var token = await ExercisesClient.GetTokenAsync("rodo");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            // Act
+            var answer = 
+                @"Tell me something about your self. 
+                Instate of sensitive information use placeholders like: %imie%, %nazwisko%, %miasto% i %zawod%";
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+
+        }
     }
 }
