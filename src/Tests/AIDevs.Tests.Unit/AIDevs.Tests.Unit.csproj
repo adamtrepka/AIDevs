@@ -28,4 +28,10 @@
     <ProjectReference Include="..\..\Shared\AIDevs.Shared.Infrastructure\AIDevs.Shared.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Assets\LongText.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
