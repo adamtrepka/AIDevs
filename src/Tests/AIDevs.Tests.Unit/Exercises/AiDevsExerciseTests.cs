@@ -1,10 +1,13 @@
-﻿using AIDevs.Shared.Infrastructure.FunctionCalling;
+﻿using AIDevs.Shared.Abstraction.Api.Answer;
+using AIDevs.Shared.Abstraction.Api.Token;
+using AIDevs.Shared.Infrastructure.FunctionCalling;
 using AIDevs.Shared.Infrastructure.FunctionCalling.Extensions;
 using AIDevs.Shared.Infrastructure.OpenAi;
 using AIDevs.Tests.Unit.Exercises.FunctionCalling;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
+using static AIDevs.Shared.Abstraction.OpenAi.Moderation.ModerationResult;
 
 namespace AIDevs.Tests.Unit.Exercises
 {
@@ -335,7 +338,7 @@ namespace AIDevs.Tests.Unit.Exercises
 
             completionsOptions.Functions.Add(FunctionDefinitionExtensions.Create<ScraperExerciseFunctionCall>());
 
-            completionsOptions.Messages.Add(new(ChatRole.System, 
+            completionsOptions.Messages.Add(new(ChatRole.System,
                 $@"Answer the question. Rules of answer: 
     1. Information about questions is in service URL: '{input}'
     2. Answer only in Polish language
@@ -373,6 +376,45 @@ namespace AIDevs.Tests.Unit.Exercises
 
 
             var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+        }
+
+        [Fact(DisplayName = "Exercise 10 - whoami")]
+        public async Task Should_Recognize_Character_Based_On_Cue()
+        {
+            //Arrange
+
+            var completionsOptions = new ChatCompletionsOptions();
+            completionsOptions.Messages.Add(new(ChatRole.System, @"Recognize character based on cue. Return name of character. If you don't now who is it return ""Not Found""."));
+
+            TokenResponse token = default;
+            AnswerResponse result = default;
+            string answer;
+            //Act
+
+            do
+            {
+                token = await ExercisesClient.GetTokenAsync("whoami");
+                var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+                var hint = task.AdditionalData["hint"].ToString();
+                TestOutputHelper.WriteLine($"Hint: {hint}");
+
+                completionsOptions.Messages.Add(new(ChatRole.User, hint));
+
+                var completionsResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
+
+                answer = completionsResult.Value.Choices[0].Message.Content;
+                TestOutputHelper.WriteLine($"Answer: {answer}");
+
+                result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+            }
+            while (answer == "Not Found" || result.Code != 0);
 
             // Assert
             TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
