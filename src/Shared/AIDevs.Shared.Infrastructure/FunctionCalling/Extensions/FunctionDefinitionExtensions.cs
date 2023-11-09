@@ -23,7 +23,8 @@ namespace AIDevs.Shared.Infrastructure.FunctionCalling.Extensions
 
             var properties = parametersType.GetProperties().ToDictionary(x => x.Name, x =>
             {
-                var type = x.PropertyType.Name;
+                //var type = x.PropertyType.Name;
+                var type = "string";
                 var descriptionAttribute = x.GetCustomAttribute<DescriptionAttribute>();
                 var requiredAttribute = x.GetCustomAttribute<RequiredAttribute>();
 

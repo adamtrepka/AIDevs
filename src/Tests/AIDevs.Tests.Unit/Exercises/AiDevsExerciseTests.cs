@@ -1,12 +1,16 @@
-﻿using AIDevs.Shared.Infrastructure.OpenAi;
+﻿using AIDevs.Shared.Infrastructure.FunctionCalling;
+using AIDevs.Shared.Infrastructure.FunctionCalling.Extensions;
+using AIDevs.Shared.Infrastructure.OpenAi;
+using AIDevs.Tests.Unit.Exercises.FunctionCalling;
 using Azure.AI.OpenAI;
+using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 
 namespace AIDevs.Tests.Unit.Exercises
 {
     public class AiDevsExerciseTests : AiDevsExerciseBaseTests
     {
-        private const string CHAT_COMPLETIONS_MODEL_NAME = "gpt-3.5-turbo";
+        private const string CHAT_COMPLETIONS_MODEL_NAME = "gpt-3.5-turbo-1106";
         private const string EMBEDDING_MODEL_NAME = "text-embedding-ada-002";
         private const string AUDIO_MODEL_NAME = "whisper-1";
         public AiDevsExerciseTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
@@ -297,7 +301,7 @@ namespace AIDevs.Tests.Unit.Exercises
             var task = await ExercisesClient.GetTaskAsync(token.Token);
 
             // Act
-            var answer = 
+            var answer =
                 @"Tell me something about your self. 
                 Instate of sensitive information use placeholders like: %imie%, %nazwisko%, %miasto% i %zawod%";
 
@@ -309,6 +313,72 @@ namespace AIDevs.Tests.Unit.Exercises
             result.Should().NotBeNull();
             result.Code.Should().Be(0);
 
+        }
+
+        [Fact(DisplayName = "Exercise 09 - scraper")]
+        public async Task Should_Handle_Errors()
+        {
+            // Arrange
+            var serviceProvider = new ServiceCollection()
+                .AddFunctionCalling()
+                .BuildServiceProvider();
+
+            var functionDispatcher = serviceProvider.GetRequiredService<IFunctionCallDispatcher>();
+
+            var token = await ExercisesClient.GetTokenAsync("scraper");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var input = task.AdditionalData["input"].ToString();
+            var question = task.AdditionalData["question"].ToString();
+
+            var completionsOptions = new ChatCompletionsOptions();
+
+            completionsOptions.Functions.Add(FunctionDefinitionExtensions.Create<ScraperExerciseFunctionCall>());
+
+            completionsOptions.Messages.Add(new(ChatRole.System, 
+                $@"Answer the question. Rules of answer: 
+    1. Information about questions is in service URL: '{input}'
+    2. Answer only in Polish language
+    3  Answer must have maximum 20 words."));
+            completionsOptions.Messages.Add(new(ChatRole.User, question));
+
+            // Act
+            var completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
+
+            var message = completionResult.Value.Choices.First().Message;
+
+            message.FunctionCall.Should().NotBeNull();
+
+            // Checking if the message contains a function call
+            if (message?.FunctionCall?.Name is not null)
+            {
+                // Function call
+                TestOutputHelper.WriteLine($"Assistant: Calling the '{message.FunctionCall.Name}' function...");
+
+                var callResult = await functionDispatcher.DispatchAsync(message.FunctionCall.Name, message.FunctionCall.Arguments);
+
+                completionsOptions.Messages.Add(message);
+
+                var functionMessage = callResult.ToChatMessage(message.FunctionCall.Name);
+
+                TestOutputHelper.WriteLine($"Function: {functionMessage.Content}");
+
+                completionsOptions.Messages.Add(functionMessage);
+
+                completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
+            }
+
+            var answer = completionResult.Value.Choices[0].Message.Content;
+            TestOutputHelper.WriteLine($"Assistant: {answer}");
+
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
         }
     }
 }

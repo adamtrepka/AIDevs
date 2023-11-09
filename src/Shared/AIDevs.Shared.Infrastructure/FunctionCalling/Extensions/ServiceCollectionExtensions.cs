@@ -12,16 +12,20 @@ namespace AIDevs.Shared.Infrastructure.FunctionCalling.Extensions
     {
         public static IServiceCollection AddFunctionCalling(this IServiceCollection services)
         {
-            var assembly = Assembly.GetExecutingAssembly();
+            var assemblies = new[] { 
+                Assembly.GetCallingAssembly(),
+                Assembly.GetExecutingAssembly(),
+                Assembly.GetEntryAssembly()
+            };
 
             var functionCallParametersType = typeof(IFunctionCallParameters);
 
-            var functions = assembly
-                .GetTypes()
+            var functions = assemblies
+                .SelectMany(x => x.GetTypes())
                 .Where(x => x.IsInterface is false && functionCallParametersType.IsAssignableFrom(x))
                 .ToDictionary(x => x.Name, x => x);
 
-            services.Scan(s => s.FromAssemblies(assembly)
+            services.Scan(s => s.FromAssemblies(assemblies!)
             .AddClasses(c => c.AssignableTo(typeof(IFunctionCallHandler<>)))
             .AsImplementedInterfaces()
             .WithScopedLifetime());
