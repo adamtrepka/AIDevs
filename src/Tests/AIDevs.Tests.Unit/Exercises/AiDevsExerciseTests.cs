@@ -1,16 +1,20 @@
 ﻿using AIDevs.Shared.Abstraction.Api.Answer;
 using AIDevs.Shared.Abstraction.Api.Token;
+using AIDevs.Shared.Infrastructure.Embedding;
 using AIDevs.Shared.Infrastructure.FunctionCalling;
 using AIDevs.Shared.Infrastructure.FunctionCalling.Extensions;
 using AIDevs.Shared.Infrastructure.OpenAi;
 using AIDevs.Tests.Unit.Exercises.FunctionCalling;
+using AIDevs.Tests.Unit.Exercises.UnknowNews;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Json;
 using System.Text.Json;
 using static AIDevs.Shared.Abstraction.OpenAi.Moderation.ModerationResult;
 
 namespace AIDevs.Tests.Unit.Exercises
 {
+    [Xunit.Collection("AiDevs - Exercises")]
     public class AiDevsExerciseTests : AiDevsExerciseBaseTests
     {
         private const string CHAT_COMPLETIONS_MODEL_NAME = "gpt-3.5-turbo-1106";
@@ -421,6 +425,65 @@ namespace AIDevs.Tests.Unit.Exercises
 
             result.Should().NotBeNull();
             result.Code.Should().Be(0);
+        }
+
+        [Fact(DisplayName = "Exercise 11 - search")]
+        public async Task Should_Find_Specyfic_Url()
+        {
+            // Arrange
+
+            var textEmbeddings = new TextEmbeddings(new HttpClient()
+            {
+                BaseAddress = new Uri("http://127.0.0.1:8080/")
+            });
+
+            var httpClient = new HttpClient();
+            var httpResponse = await httpClient.GetAsync("https://unknow.news/archiwum.json");
+            var archive = await httpResponse.Content.ReadFromJsonAsync<IEnumerable<Article>>();
+
+
+            var embedings = new List<Embedding<Article>>();
+
+            foreach (var article in archive.OrderByDescending(x => x.Date).Take(300))
+            {
+                try
+                {
+                    var vector = await textEmbeddings.GetEmbeddingsAsync(new(article.Info, true));
+
+                    embedings.Add(Embedding<Article>.Create(article, vector));
+                }
+                catch (Exception ex)
+                {
+
+                }
+            }
+
+            // Act
+
+            var token = await ExercisesClient.GetTokenAsync("search");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var question = task.AdditionalData["question"].ToString();
+            var questionEmbedding = await textEmbeddings.GetEmbeddingsAsync(new(question, false));
+
+            TestOutputHelper.WriteLine($"Question: {question}");
+
+            var answer = embedings
+                .OrderByDescending(embedding => Extensions.CosineSimilarity(questionEmbedding, embedding.Vector))
+                .FirstOrDefault();
+
+            TestOutputHelper.WriteLine($"Answer: {answer.Input.Info}");
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer.Input.Url);
+
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+
+
         }
     }
 }

@@ -1,0 +1,9 @@
+version: '3'
+services:
+  text-embeddings-inference:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-0.3.0
+    command: --model-id "intfloat/multilingual-e5-large"
+    ports:
+      - "0.0.0.0:8080:80"
+    volumes:
+      - ./data:/data

@@ -4,6 +4,7 @@ using Xunit.Abstractions;
 
 namespace AIDevs.Tests.Unit.Exercises
 {
+    [Xunit.Collection("AiDevs - Exercises")]
     public class AiDevsExerciseBaseTests
     {
         public AiDevsExerciseBaseTests(ITestOutputHelper testOutputHelper)
