@@ -5,6 +5,7 @@ using AIDevs.Shared.Infrastructure.FunctionCalling;
 using AIDevs.Shared.Infrastructure.FunctionCalling.Extensions;
 using AIDevs.Shared.Infrastructure.OpenAi;
 using AIDevs.Tests.Unit.Exercises.FunctionCalling;
+using AIDevs.Tests.Unit.Exercises.People;
 using AIDevs.Tests.Unit.Exercises.UnknowNews;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.DependencyInjection;
@@ -484,6 +485,64 @@ namespace AIDevs.Tests.Unit.Exercises
             result.Code.Should().Be(0);
 
 
+        }
+
+        [Fact(DisplayName = "Exercise 12 - people")]
+        public async Task Should_Answer_The_Question()
+        {
+            var textEmbeddings = new TextEmbeddings(new HttpClient()
+            {
+                BaseAddress = new Uri("http://127.0.0.1:8080/")
+            });
+
+            var httpClient = new HttpClient();
+            var httpResponse = await httpClient.GetAsync("https://zadania.aidevs.pl/data/people.json");
+            var people = await httpResponse.Content.ReadFromJsonAsync<IEnumerable<PersonInfo>>();
+
+
+            foreach (var record in people)
+            {
+                record.Embedding = await textEmbeddings.GetEmbeddingsAsync(new(record.Key, true));
+            }
+
+            var token = await ExercisesClient.GetTokenAsync("people");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var question = task.AdditionalData["question"].ToString();
+            TestOutputHelper.WriteLine($"Question: {question}");
+
+            var questionEmbedding = await textEmbeddings.GetEmbeddingsAsync(new(question, true));
+
+            var person = people
+                .OrderByDescending(x => Extensions.CosineSimilarity(questionEmbedding, x.Embedding))
+                .FirstOrDefault();
+
+            var completionsOptions = new ChatCompletionsOptions();
+
+            completionsOptions.Messages.Add(new(ChatRole.System,$@"Answer the question based on information about person:
+
+Name: '{person.Key}'
+Age: '{person.Age}'
+Info: '{person.Info}'
+Favorite character: '{person.FavoriteCharacter}'
+Favorite series: '{person.FavoriteSeries}'
+Favorite movie: '{person.FavoriteMovie}'
+Favorite color: '{person.FavoriteColor}'.
+"));
+            completionsOptions.Messages.Add(new(ChatRole.User, question));
+
+            var completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
+
+            var answer = completionResult.Value.Choices.FirstOrDefault().Message.Content;
+
+            TestOutputHelper.WriteLine($"Answer: {answer}");
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
         }
     }
 }
