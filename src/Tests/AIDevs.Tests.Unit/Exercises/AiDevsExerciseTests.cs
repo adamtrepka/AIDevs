@@ -544,5 +544,72 @@ Favorite color: '{person.FavoriteColor}'.
             result.Should().NotBeNull();
             result.Code.Should().Be(0);
         }
+
+        [Fact(DisplayName = "Exercise 13 - knowledge")]
+        public async Task Should_Answer_The_Quesion_Based_On_External_Api()
+        {
+            var token = await ExercisesClient.GetTokenAsync("knowledge");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var database_1 = task.AdditionalData["database #1"].ToString();
+            var database_2 = task.AdditionalData["database #2"].ToString();
+            var question = task.AdditionalData["question"].ToString();
+
+            TestOutputHelper.WriteLine($"Database 1: '{database_1}'");
+            TestOutputHelper.WriteLine($"Database 2: '{database_2}'");
+            TestOutputHelper.WriteLine($"Question: '{question}'");
+
+            var serviceProvider = new ServiceCollection()
+                .AddFunctionCalling()
+                .BuildServiceProvider();
+
+            var functionDispatcher = serviceProvider.GetRequiredService<IFunctionCallDispatcher>();
+
+            var completionsOptions = new ChatCompletionsOptions();
+
+            completionsOptions.Functions.Add(FunctionDefinitionExtensions.Create<NbpFunctionCall>());
+            completionsOptions.Functions.Add(FunctionDefinitionExtensions.Create<CountriesFunctionCall>());
+
+            completionsOptions.Messages.Add(new(ChatRole.System, $@"Answer the question."));
+            completionsOptions.Messages.Add(new(ChatRole.User, question));
+
+            // Act
+            var completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
+
+            var message = completionResult.Value.Choices.First().Message;
+
+            message.FunctionCall.Should().NotBeNull();
+
+            // Checking if the message contains a function call
+            if (message?.FunctionCall?.Name is not null)
+            {
+                // Function call
+                TestOutputHelper.WriteLine($"Assistant: Calling the '{message.FunctionCall.Name}' function...");
+
+                var callResult = await functionDispatcher.DispatchAsync(message.FunctionCall.Name, message.FunctionCall.Arguments);
+
+                completionsOptions.Messages.Add(message);
+
+                var functionMessage = callResult.ToChatMessage(message.FunctionCall.Name);
+
+                TestOutputHelper.WriteLine($"Function: {functionMessage.Content}");
+
+                completionsOptions.Messages.Add(functionMessage);
+
+                completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
+            }
+
+            var answer = completionResult.Value.Choices[0].Message.Content;
+            TestOutputHelper.WriteLine($"Assistant: {answer}");
+
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+        }
     }
 }
