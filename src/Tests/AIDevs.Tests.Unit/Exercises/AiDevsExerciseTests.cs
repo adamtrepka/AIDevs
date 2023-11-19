@@ -611,5 +611,42 @@ Favorite color: '{person.FavoriteColor}'.
             result.Should().NotBeNull();
             result.Code.Should().Be(0);
         }
+
+        [Fact(DisplayName = "Exercise 14 - tools")]
+        public async Task Should_Call_Correct_Function()
+        {
+            // Arrange
+            var token = await ExercisesClient.GetTokenAsync("tools");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+            var question = task.AdditionalData["question"].ToString();
+            TestOutputHelper.WriteLine($"Question: '{question}'");
+
+            var completionsOptions = new ChatCompletionsOptions();
+
+            completionsOptions.Functions.Add(FunctionDefinitionExtensions.Create<ToolFunctionCall>());
+            completionsOptions.Messages.Add(new ChatMessage(ChatRole.System,$"Today is: {DateTime.Now}"));
+            completionsOptions.Messages.Add(new(ChatRole.User, question));
+
+            // Act
+            var completionResult = await AzureOpenAiClient.GetChatCompletionsAsync(CHAT_COMPLETIONS_MODEL_NAME, completionsOptions);
+
+            var message = completionResult.Value.Choices.First().Message;
+
+            message.FunctionCall.Should().NotBeNull();
+
+            var answer = message.FunctionCall.Arguments;
+
+            TestOutputHelper.WriteLine("Arguments: {0}", answer);
+
+            var functionCallParams = JsonSerializer.Deserialize<ToolFunctionCall>(answer);
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, functionCallParams);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+        }
     }
 }
