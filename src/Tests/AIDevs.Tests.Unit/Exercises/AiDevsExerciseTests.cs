@@ -9,6 +9,8 @@ using AIDevs.Tests.Unit.Exercises.People;
 using AIDevs.Tests.Unit.Exercises.UnknowNews;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.DependencyInjection;
+using System.Linq;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using static AIDevs.Shared.Abstraction.OpenAi.Moderation.ModerationResult;
@@ -641,6 +643,29 @@ Favorite color: '{person.FavoriteColor}'.
             var functionCallParams = JsonSerializer.Deserialize<ToolFunctionCall>(answer);
 
             var result = await ExercisesClient.SendResponseAsync(token.Token, functionCallParams);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+        }
+
+        [Fact(DisplayName = "Exercise - optimaldb")]
+         public async Task Should_Answer_The_Questions_Based_On_External_Database()
+        {
+            // Arange
+            var database = await new HttpClient().GetFromJsonAsync <Dictionary<string, string[]>>("https://zadania.aidevs.pl/data/3friends.json");
+
+            // Act
+            var databaseShort = database.ToDictionary(x => x.Key, x => x.Value.Take((int)(x.Value.Length * 0.3)));
+
+            var answer = JsonSerializer.Serialize(databaseShort);
+
+            var token = await ExercisesClient.GetTokenAsync("optimaldb");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
 
             // Assert
             TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
