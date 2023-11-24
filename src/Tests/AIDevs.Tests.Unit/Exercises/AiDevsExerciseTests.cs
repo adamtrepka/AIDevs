@@ -4,6 +4,7 @@ using AIDevs.Shared.Infrastructure.Embedding;
 using AIDevs.Shared.Infrastructure.FunctionCalling;
 using AIDevs.Shared.Infrastructure.FunctionCalling.Extensions;
 using AIDevs.Shared.Infrastructure.OpenAi;
+using AIDevs.Shared.Infrastructure.RenderForm;
 using AIDevs.Tests.Unit.Exercises.FunctionCalling;
 using AIDevs.Tests.Unit.Exercises.People;
 using AIDevs.Tests.Unit.Exercises.UnknowNews;
@@ -521,7 +522,7 @@ namespace AIDevs.Tests.Unit.Exercises
 
             var completionsOptions = new ChatCompletionsOptions();
 
-            completionsOptions.Messages.Add(new(ChatRole.System,$@"Answer the question based on information about person:
+            completionsOptions.Messages.Add(new(ChatRole.System, $@"Answer the question based on information about person:
 
 Name: '{person.Key}'
 Age: '{person.Age}'
@@ -626,7 +627,7 @@ Favorite color: '{person.FavoriteColor}'.
             var completionsOptions = new ChatCompletionsOptions();
 
             completionsOptions.Functions.Add(FunctionDefinitionExtensions.Create<ToolFunctionCall>());
-            completionsOptions.Messages.Add(new ChatMessage(ChatRole.System,$"Today is: {DateTime.Now}"));
+            completionsOptions.Messages.Add(new ChatMessage(ChatRole.System, $"Today is: {DateTime.Now}"));
             completionsOptions.Messages.Add(new(ChatRole.User, question));
 
             // Act
@@ -652,10 +653,10 @@ Favorite color: '{person.FavoriteColor}'.
         }
 
         [Fact(DisplayName = "Exercise - optimaldb")]
-         public async Task Should_Answer_The_Questions_Based_On_External_Database()
+        public async Task Should_Answer_The_Questions_Based_On_External_Database()
         {
             // Arange
-            var database = await new HttpClient().GetFromJsonAsync <Dictionary<string, string[]>>("https://zadania.aidevs.pl/data/3friends.json");
+            var database = await new HttpClient().GetFromJsonAsync<Dictionary<string, string[]>>("https://zadania.aidevs.pl/data/3friends.json");
 
             // Act
             var databaseShort = database.ToDictionary(x => x.Key, x => x.Value.Take((int)(x.Value.Length * 0.3)));
@@ -664,6 +665,42 @@ Favorite color: '{person.FavoriteColor}'.
 
             var token = await ExercisesClient.GetTokenAsync("optimaldb");
             var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
+
+            // Assert
+            TestOutputHelper.WriteLine("Result message: {0}", result.Msg);
+
+            result.Should().NotBeNull();
+            result.Code.Should().Be(0);
+        }
+
+        [Fact(DisplayName = "Exercise - meme")]
+        public async Task Should_Generate_Meme()
+        {
+            // Act
+
+            var token = await ExercisesClient.GetTokenAsync("meme");
+            var task = await ExercisesClient.GetTaskAsync(token.Token);
+
+            var image = task.AdditionalData["image"].ToString();
+            var text = task.AdditionalData["text"].ToString();
+
+            var templateId = "scary-falcons-rumble-poorly-1574";
+            var renderFormHttpClient = RenderFormHttpClientFactory.Create();
+
+            var renderFormParameters = new
+            {
+                Template = templateId,
+                Data = new Dictionary<string, string>
+                {
+                    {"image.src",image}, {"title.text", text }
+                }
+            };
+
+            var renderFormHttpResult = await renderFormHttpClient.PostAsJsonAsync("render", renderFormParameters);
+            var renderFormResult = await renderFormHttpResult.Content.ReadFromJsonAsync<Dictionary<string, string>>();
+            var answer = renderFormResult["href"];
 
             var result = await ExercisesClient.SendResponseAsync(token.Token, answer);
 
