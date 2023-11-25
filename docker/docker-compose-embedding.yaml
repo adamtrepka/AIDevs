@@ -8,3 +8,10 @@ services:
       - "0.0.0.0:8080:80"
     volumes:
       - ./data:/data
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - 0.0.0.0:6333:6333
+      - 0.0.0.0:6334:6334
+    volumes:
+      - ./qdrant:/qdrant/storage

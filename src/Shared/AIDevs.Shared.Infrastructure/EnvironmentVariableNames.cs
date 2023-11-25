@@ -10,5 +10,6 @@ namespace AIDevs.Shared.Infrastructure
     {
         public const string AIDEVS_APIKEY_ENVIRONMENT_VARIABLE_NAME = "AIDEVS_EXERCISES_APIKEY";
         public const string OPENAI_APIKEY_ENVIRONMENT_VARIABLE_NAME = "OPENAI_APIKEY";
+        public const string RENDER_FORM_APIKEY_ENVIRONMENT_VARIABLE_NAME = "RENDER_FORM_APIKEY";
     }
 }
